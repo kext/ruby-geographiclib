@@ -1,6 +1,7 @@
 #include <ruby.h>
 #include <GeographicLib/Constants.hpp>
 #include <GeographicLib/Geodesic.hpp>
+#include <GeographicLib/DMS.hpp>
 
 static VALUE geographiclib_geodesic_direct(VALUE self, VALUE a, VALUE f, VALUE vlat1, VALUE vlon1, VALUE vazi1, VALUE arcmode, VALUE vs12_a12)
 {
@@ -50,6 +51,55 @@ static VALUE geographiclib_geodesic_inverse(VALUE self, VALUE a, VALUE f, VALUE 
   return r;
 }
 
+static VALUE geographiclib_dms_decode(VALUE self, VALUE str)
+{
+  std::string s = rb_string_value_cstr(&str);
+  try {
+    GeographicLib::DMS::flag f;
+    GeographicLib::Math::real angle = GeographicLib::DMS::Decode(s, f);
+    VALUE r = rb_ary_new();
+    rb_ary_push(r, DBL2NUM(angle));
+    switch (f) {
+      case GeographicLib::DMS::LATITUDE: rb_ary_push(r, rb_id2sym(rb_intern_const("lat"))); break;
+      case GeographicLib::DMS::LONGITUDE: rb_ary_push(r, rb_id2sym(rb_intern_const("lon"))); break;
+      case GeographicLib::DMS::AZIMUTH: rb_ary_push(r, rb_id2sym(rb_intern_const("azi"))); break;
+      case GeographicLib::DMS::NUMBER: rb_ary_push(r, rb_id2sym(rb_intern_const("number"))); break;
+      default: rb_ary_push(r, rb_id2sym(rb_intern_const("none"))); break;
+    }
+    return r;
+  } catch (GeographicLib::GeographicErr) {
+    rb_raise(rb_eRuntimeError, "String is malformed.");
+  }
+}
+
+static VALUE geographiclib_dms_decode_lat_lon(VALUE self, VALUE vlat, VALUE vlon)
+{
+  std::string slat = rb_string_value_cstr(&vlat);
+  std::string slon = rb_string_value_cstr(&vlon);
+  try {
+    GeographicLib::Math::real lat, lon;
+    GeographicLib::DMS::DecodeLatLon(slat, slon, lat, lon);
+    VALUE r = rb_ary_new();
+    rb_ary_push(r, DBL2NUM(lat));
+    rb_ary_push(r, DBL2NUM(lon));
+    return r;
+  } catch (GeographicLib::GeographicErr) {
+    rb_raise(rb_eRuntimeError, "String is malformed.");
+  }
+}
+
+static VALUE geographiclib_dms_decode_azi(VALUE self, VALUE vazi)
+{
+  std::string sazi = rb_string_value_cstr(&vazi);
+  try {
+    GeographicLib::Math::real azi;
+    azi = GeographicLib::DMS::DecodeAzimuth(sazi);
+    return DBL2NUM(azi);
+  } catch (GeographicLib::GeographicErr) {
+    rb_raise(rb_eRuntimeError, "String is malformed.");
+  }
+}
+
 extern "C" void Init_geographiclib(void)
 {
   VALUE geographiclib = rb_define_module("GeographicLib");
@@ -59,4 +109,8 @@ extern "C" void Init_geographiclib(void)
   VALUE geodesic = rb_define_class_under(geographiclib, "Geodesic", rb_cObject);
   rb_define_singleton_method(geodesic, "direct", (VALUE (*)(...)) geographiclib_geodesic_direct, 7);
   rb_define_singleton_method(geodesic, "inverse", (VALUE (*)(...)) geographiclib_geodesic_inverse, 6);
+  VALUE dms = rb_define_module_under(geographiclib, "DMS");
+  rb_define_module_function(dms, "decode", (VALUE (*)(...)) geographiclib_dms_decode, 1);
+  rb_define_module_function(dms, "decode_lat_lon", (VALUE (*)(...)) geographiclib_dms_decode_lat_lon, 2);
+  rb_define_module_function(dms, "decode_azi", (VALUE (*)(...)) geographiclib_dms_decode_azi, 1);
 }
